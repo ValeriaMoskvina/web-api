@@ -6,9 +6,9 @@ namespace WebApi.MinimalApi.Models;
 public class UserToCreateDto
 {
     [Required]
-    public string Login;
+    public string? Login{ get; set; }
     [DefaultValue("John")]
-    public string FirstName;
+    public string? FirstName{ get; set; }
     [DefaultValue("Doe")]
-    public string LastName;
+    public string? LastName{ get; set; }
 }

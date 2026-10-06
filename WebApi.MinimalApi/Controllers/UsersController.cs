@@ -1,4 +1,6 @@
 ﻿using AutoMapper;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using WebApi.MinimalApi.Domain;
 using WebApi.MinimalApi.Models;
@@ -38,12 +40,12 @@ public class UsersController : Controller
             return BadRequest();
         }
         
-        if (string.IsNullOrEmpty(user?.Login) || user.Login.Any(letter => !char.IsLetterOrDigit(letter)))
+        if (user.Login?.Any(letter => !char.IsLetterOrDigit(letter)) == true)
         {
-            ModelState.AddModelError("Login", $"Login contains invalid characters");
+            ModelState.AddModelError("Login", "Login contains invalid characters");
         }
         
-        if (ModelState.IsValid == false)
+        if (!ModelState.IsValid)
         {
             return UnprocessableEntity(ModelState);
         }
@@ -52,6 +54,80 @@ public class UsersController : Controller
         return CreatedAtRoute(
             nameof(GetUserById),
             new { userId = createdUserEntity.Id },
-            mapper.Map<UserDto>(createdUserEntity));
+            createdUserEntity.Id);
+    }
+    
+    [HttpPut("{userId}")]
+    public IActionResult UpdateUser(
+        [FromBody] UserToUpdateDto? user,
+        [FromRoute] string userId)
+    {
+        if (user is null)
+        {
+            return BadRequest();
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return UnprocessableEntity(ModelState);
+        }
+        
+        if (!Guid.TryParse(userId, out var id))
+        {
+            return BadRequest();
+        }
+        
+        var userEntityToUpdate = mapper.Map(
+            user, 
+            userRepository.FindById(id) ?? new UserEntity(id));
+
+        userRepository.UpdateOrInsert(userEntityToUpdate, out var isInserted);
+        
+        if (isInserted)
+        {
+            return CreatedAtRoute(
+                nameof(GetUserById),
+                new { userId },
+                mapper.Map<UserDto>(userEntityToUpdate));
+        }
+        return NoContent();
+    }
+    
+    [HttpPatch("{userId}")]
+    public IActionResult PartiallyUpdateUser(
+        [FromBody] JsonPatchDocument<UserToUpdateDto>? patchDoc,
+        [FromRoute] string userId)
+    {
+        if (patchDoc is null)
+        {
+            return BadRequest();
+        }
+        
+        if (!Guid.TryParse(userId, out var id))
+        {
+            return NotFound();
+        }
+
+        var userEntity = userRepository.FindById(id);
+
+        if (userEntity is null)
+        {
+            return NotFound();
+        }
+
+        var userDto = mapper.Map<UserToUpdateDto>(userEntity);
+
+        patchDoc.ApplyTo(userDto, ModelState);
+
+        if (!TryValidateModel(userDto))
+        {
+            return UnprocessableEntity(ModelState);
+        }
+
+        mapper.Map(userDto, userEntity);
+
+        userRepository.UpdateOrInsert(userEntity, out _);
+
+        return NoContent();
     }
 }
