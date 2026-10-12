@@ -11,7 +11,6 @@ namespace WebApi.MinimalApi.Controllers;
 public class UsersController : Controller
 {
     private readonly IUserRepository _userRepository;
-    private readonly IMapper _mapper;
     
     
     // Чтобы ASP.NET положил что-то в userRepository требуется конфигурация
@@ -34,6 +33,7 @@ public class UsersController : Controller
     }
 
     [HttpPost]
+    [Produces("application/json", "application/xml")]
     public IActionResult CreateUser([FromBody] UserCreateToDto? user)
     {
         if (user == null)
@@ -45,13 +45,8 @@ public class UsersController : Controller
         {
             return UnprocessableEntity(ModelState);
         }
-
-        if (!user.Login.All(c => char.IsLetterOrDigit(c)))
-        {
-            ModelState.AddModelError("login", "login должен содержать только буквы и цифры");
-            return UnprocessableEntity(ModelState);
-        }
-        var userEntity = new UserEntity()
+        
+        var userEntity = new UserEntity(Guid.NewGuid())
         {
             Login = user.Login,
             FirstName = user.FirstName,
@@ -61,7 +56,7 @@ public class UsersController : Controller
         return CreatedAtRoute(
             nameof(GetUserById),
             new { userId = userEntity.Id },
-            userEntity);
+            userEntity.Id);
     }
 
     private UserDto GetUserDtoByUserEntity(UserEntity user)
@@ -73,5 +68,59 @@ public class UsersController : Controller
             GamesPlayed = user.GamesPlayed,
             CurrentGameId = user.CurrentGameId,
         };
+    }
+
+    [HttpPut("{userId}")]
+    [Produces("application/json", "application/xml")]
+    public IActionResult UpdateUser([FromBody] UserUpdateToDto? user)
+    {
+        if (user == null)
+        {
+            return BadRequest();
+        }
+        
+        if (!ModelState.IsValid)
+        {
+            return UnprocessableEntity(ModelState);
+        }
+        var userId =  GetUserId();
+        if (userId is null)
+        {
+            return BadRequest();
+        }
+        var userEntity = new UserEntity(userId.Value)
+        {
+            Login = user.Login,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            GamesPlayed = 0,
+        };
+        _userRepository.UpdateOrInsert(userEntity, out var isInserted);
+        if (isInserted)
+        {
+            return CreatedAtRoute(
+                nameof(GetUserById),
+                new { userId = userEntity.Id },
+                userEntity);
+        }
+        else
+        {
+            return NoContent();
+        }
+    }
+    
+    private Guid? GetUserId()
+    {
+        var rawUserId = RouteData.Values["userId"]?.ToString();
+        Guid userId;
+        try
+        {
+            userId = new Guid(rawUserId);
+        }
+        catch
+        {
+            return null;
+        }
+        return userId;
     }
 }
