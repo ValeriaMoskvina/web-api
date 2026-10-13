@@ -1,9 +1,9 @@
-﻿using AutoMapper;
-using System.Linq;
+﻿using System.Linq;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using WebApi.MinimalApi.Domain;
 using WebApi.MinimalApi.Models;
+using Newtonsoft.Json;
 
 namespace WebApi.MinimalApi.Controllers;
 
@@ -12,12 +12,14 @@ namespace WebApi.MinimalApi.Controllers;
 public class UsersController : Controller
 {
     private readonly IUserRepository _userRepository;
+    private readonly LinkGenerator _linkGenerator;
     
     
     // Чтобы ASP.NET положил что-то в userRepository требуется конфигурация
-    public UsersController(IUserRepository userRepository)
+    public UsersController(IUserRepository userRepository, LinkGenerator linkGenerator)
     {
         _userRepository = userRepository;
+        _linkGenerator = linkGenerator;
     }
 
     [HttpHead("{userId}")]
@@ -64,7 +66,7 @@ public class UsersController : Controller
             insertedUserEntity.Id);
     }
 
-    private UserDto GetUserDtoByUserEntity(UserEntity user)
+    private static UserDto GetUserDtoByUserEntity(UserEntity user)
     {
         return new UserDto()
         {
@@ -166,4 +168,41 @@ public class UsersController : Controller
         _userRepository.Delete(userId);
         return NoContent();
     }
+
+    [HttpGet(Name = nameof(GetUsers))]
+    [Produces("application/json", "application/xml")]
+    public IActionResult GetUsers([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+    {
+        pageSize = Math.Clamp(pageSize, 1, 20);
+        pageNumber = Math.Max(pageNumber, 1);
+        var pageList = _userRepository.GetPage(pageNumber, pageSize);
+        var users = pageList.Select(x => GetUserDtoByUserEntity(x));
+        var paginationHeader = new
+        {
+            previousPageLink = pageNumber == 1 ? null : _linkGenerator.GetUriByRouteValues(
+                HttpContext, 
+                nameof(GetUsers),
+                new { pageNumber = pageNumber - 1, pageSize }),
+            nextPageLink = _linkGenerator.GetUriByRouteValues(
+                HttpContext,
+                nameof(GetUsers),
+                new { pageNumber = pageNumber + 1, pageSize }),
+            totalCount = pageList.TotalCount,
+            pageSize,
+            currentPage = pageList.CurrentPage,
+            totalPages = pageList.TotalPages,
+        };
+        Response.Headers.Add("X-Pagination", JsonConvert.SerializeObject(paginationHeader));
+        
+        return Ok(users);
+    }
+
+    [HttpOptions(Name = nameof(GetUsers))]
+    [Produces("application/json", "application/xml")]
+    public IActionResult GetUserOptions()
+    {
+        Response.Headers.Add("Allow", "POST, GET, OPTIONS");
+        return Ok();
+    }
+    
 }
