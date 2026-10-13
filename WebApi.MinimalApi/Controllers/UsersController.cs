@@ -20,6 +20,7 @@ public class UsersController : Controller
         _userRepository = userRepository;
     }
 
+    [HttpHead("{userId}")]
     [HttpGet("{userId}", Name = nameof(GetUserById))]
     [Produces("application/json", "application/xml")]
     public ActionResult<UserDto> GetUserById([FromRoute] Guid userId)
@@ -29,6 +30,8 @@ public class UsersController : Controller
         {
             return NotFound();
         }
+        if (HttpMethods.IsHead(Request.Method))
+            return Content(string.Empty, "application/json; charset=utf-8");
         var userDto = GetUserDtoByUserEntity(user);
         return Ok(userDto);
     }
