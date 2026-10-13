@@ -1,5 +1,6 @@
 ﻿using AutoMapper;
 using System.Linq;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using WebApi.MinimalApi.Domain;
 using WebApi.MinimalApi.Models;
@@ -46,17 +47,18 @@ public class UsersController : Controller
             return UnprocessableEntity(ModelState);
         }
         
-        var userEntity = new UserEntity(Guid.NewGuid())
+        var userEntity = new UserEntity()
         {
             Login = user.Login,
             FirstName = user.FirstName,
             LastName = user.LastName,
             GamesPlayed = 0,
         };
+        var insertedUserEntity = _userRepository.Insert(userEntity);
         return CreatedAtRoute(
             nameof(GetUserById),
-            new { userId = userEntity.Id },
-            userEntity.Id);
+            new { userId = insertedUserEntity.Id },
+            insertedUserEntity.Id);
     }
 
     private UserDto GetUserDtoByUserEntity(UserEntity user)
@@ -122,5 +124,30 @@ public class UsersController : Controller
             return null;
         }
         return userId;
+    }
+
+    [HttpPatch("{userId}")]
+    [Produces("application/json", "application/xml")]
+    public IActionResult PartiallyUpdateUser([FromRoute] Guid userId, [FromBody] JsonPatchDocument<UserUpdateToDto>? patchDoc)
+    {
+        if (patchDoc is null)
+        {
+            return BadRequest();
+        }
+        var userEntity = _userRepository.FindById(userId);
+        if (userEntity == null)
+        {
+            return NotFound();
+        }
+
+        var userUpdate = new UserUpdateToDto(userEntity.Login, userEntity.FirstName, userEntity.LastName); 
+        patchDoc.ApplyTo(userUpdate, ModelState);
+
+        if (!ModelState.IsValid || !TryValidateModel(userUpdate))
+        {
+            return UnprocessableEntity(ModelState);
+        }
+        _userRepository.Update(userEntity);
+        return NoContent();
     }
 }
