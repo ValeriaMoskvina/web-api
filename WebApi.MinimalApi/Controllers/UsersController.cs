@@ -36,7 +36,8 @@ public class UsersController : Controller
 
         if (HttpMethods.IsHead(Request.Method))
         {
-            return Content(string.Empty, "application/json; charset=utf-8");
+            Response.Headers.Append("Content-Type", "application/json; charset=utf-8");
+            return Ok();
         }
         return Ok(mapper.Map<UserDto>(user));
     }
@@ -203,5 +204,12 @@ public class UsersController : Controller
         userRepository.Delete(userEntity.Id);
 
         return NoContent();
+    }
+    
+    [HttpOptions]
+    public IActionResult GetOptions()
+    {
+        Response.Headers.Append("Allow", "POST, GET, OPTIONS");
+        return Ok();
     }
 }
